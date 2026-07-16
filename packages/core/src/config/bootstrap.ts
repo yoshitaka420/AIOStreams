@@ -11,6 +11,7 @@ export const bootstrap = {
   internalUrl: Env.INTERNAL_URL,
   internalSecret: Env.INTERNAL_SECRET,
   databaseUri: Env.DATABASE_URI,
+  diskCacheDir: Env.DISK_CACHE_DIR,
   redisUri: Env.REDIS_URI,
   redisTimeout: Env.REDIS_TIMEOUT,
   settingsRefreshInterval: Env.SETTINGS_REFRESH_INTERVAL,

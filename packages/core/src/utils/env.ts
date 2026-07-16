@@ -253,6 +253,10 @@ export const Env = cleanEnv(process.env, {
     default: 'sqlite://./data/db.sqlite',
     desc: 'Database URI for the addon',
   }),
+  DISK_CACHE_DIR: str({
+    default: undefined,
+    desc: 'Directory for the disk-backed caches (usenet segments, grabbed NZBs, torrent metadata). Defaults to `cache` under the data folder.',
+  }),
   REDIS_URI: str({
     default: undefined,
     desc: 'Redis URI for the addon',

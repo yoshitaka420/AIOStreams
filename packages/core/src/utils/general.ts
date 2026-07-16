@@ -20,10 +20,13 @@ export function getDataFolder(): string {
 
 /**
  * Single parent directory for every disk-backed cache. Each cache lives in its
- * own namespace subdirectory (`<data>/cache/<namespace>/`) so they share one
- * root and surface together on the dashboard cache page.
+ * own namespace subdirectory (`<root>/<namespace>/`) so they share one root and
+ * surface together on the dashboard cache page. The root is `<data>/cache`,
+ * overridable via `DISK_CACHE_DIR`.
  */
 export function getCacheFolder(): string {
+  const override = appConfig.bootstrap.diskCacheDir;
+  if (override) return path.resolve(override);
   return path.join(getDataFolder(), 'cache');
 }
 
