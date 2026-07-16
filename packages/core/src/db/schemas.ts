@@ -1167,7 +1167,7 @@ const MetaVideoSchema = z
     id: z.string(),
     title: z.string().or(z.null()).optional(),
     name: z.string().or(z.null()).optional(),
-    released: z.string().datetime().or(z.null()).optional(),
+    released: z.string().nullable().optional(),
     thumbnail: z.string().or(z.null()).optional(),
     streams: z.array(StreamSchema).or(z.null()).optional(),
     available: z.boolean().or(z.null()).optional(),
