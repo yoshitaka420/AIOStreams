@@ -384,6 +384,10 @@ function deriveSourceName(url: string): string {
     const parts = parsed.pathname.split('/').filter(Boolean);
     if (parts.length >= 2) return `${parts[0]}/${parts[1]}`;
   }
+  if (parsed.hostname === 'gist.githubusercontent.com') {
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    if (parts.length >= 1) return parts[0];
+  }
   return parsed.hostname;
 }
 
