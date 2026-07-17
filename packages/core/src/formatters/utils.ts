@@ -125,7 +125,7 @@ const SMALL_CAPS_MAP: Record<string, string> = {
   C: 'ᴄ', // U+1D04
   D: 'ᴅ', // U+1D05
   E: 'ᴇ', // U+1D07
-  F: 'ꜰ', // U+A730
+  F: 'ғ', // U+0493
   G: 'ɢ', // U+0262
   H: 'ʜ', // U+029C
   I: 'ɪ', // U+026A
@@ -136,7 +136,7 @@ const SMALL_CAPS_MAP: Record<string, string> = {
   N: 'ɴ', // U+0274
   O: 'ᴏ', // U+1D0F
   P: 'ᴘ', // U+1D18
-  Q: 'ꞯ', // U+A7AF
+  Q: 'ǫ', // U+01EB
   R: 'ʀ', // U+0280
   S: 'ꜱ', // U+A731
   T: 'ᴛ', // U+1D1B
