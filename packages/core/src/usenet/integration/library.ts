@@ -884,8 +884,8 @@ export async function mintUsenetLibraryToken(
   }
   if (!file) return undefined;
   const filename =
-    (file.path ? baseName(file.path) : undefined) ??
     file.name ??
+    (file.path ? baseName(file.path) : undefined) ??
     entry.name ??
     entry.nzbHash;
   const token = encodeUsenetStreamToken({

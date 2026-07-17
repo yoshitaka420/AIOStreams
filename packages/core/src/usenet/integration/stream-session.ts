@@ -400,7 +400,7 @@ async function getStreamSession(
               hooks,
               holeHooks
             );
-            filename = stream.filename ?? decoded.filename;
+            filename = decoded.filename ?? stream.filename;
           } catch (err) {
             logger.warn(
               {
@@ -430,7 +430,9 @@ async function getStreamSession(
             undefined,
             holeHooks
           );
-          filename = stream.filename ?? decoded.filename;
+          filename = decoded.innerPath
+            ? (decoded.filename ?? stream.filename)
+            : (stream.filename ?? decoded.filename);
         } else {
           const handle = await engine.selectAndOpen(
             nzb,
