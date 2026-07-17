@@ -15,8 +15,20 @@ const nullableString = z.string().nullable();
 const nullableUrl = z.union([urlString, z.null()]);
 const stringList = z.array(z.string());
 
+const titleLangSpecs = z
+  .union([z.array(z.string()), z.string().transform((s) => s.split(','))])
+  .transform((specs) =>
+    specs.map((t) => t.trim().toLowerCase()).filter(Boolean)
+  );
+
 const titleLangMap = z.union([
-  z.record(z.string(), z.array(z.string())),
+  z
+    .record(z.string(), titleLangSpecs)
+    .transform((rec) =>
+      Object.fromEntries(
+        Object.entries(rec).map(([k, v]) => [k.trim().toLowerCase(), v])
+      )
+    ),
   z.string().transform((value) => {
     const out: Record<string, string[]> = {};
     if (!value.trim()) return out;
@@ -276,9 +288,14 @@ export const builtinsSchema = {
       default: {} as Record<string, string[]>,
       label: 'Title languages',
       description: {
-        ui: 'Per-domain control over which titles to use when scraping. Format: `domain:spec,...` where spec is one of `default`, `all`, `original`, or an ISO 639-1 code.',
+        ui:
+          'Control which titles built-in addons use for text-based queries, per indexer. ' +
+          'Keys are matched in priority order: exact indexer hostname (e.g. `my-indexer.com`), auto-extracted indexer name (Jackett/NZBHydra2), addon ID (`newznab`, `torznab`, `easynews`, `knaben`, `prowlarr`, `torrent-galaxy`), then `*` as the fallback for everything else. ' +
+          'Each value is one or more comma-separated specs: `default` (primary/English-style title), `all` (all alternative titles up to the title limit), `original` (TMDB original-language title), or an ISO 639-1 code (e.g. `de`, `fr`). ' +
+          'Only the highest-priority matching key applies; duplicates are removed and the primary title is always kept as a fallback. ' +
+          'Example: `*` = `default,original` queries every indexer with the primary and TMDB original-language titles.',
         env:
-          'Fine-grained alternative-title control, per indexer hostname, indexer name, or addon type. Supersedes BUILTIN_SCRAPE_WITH_ALL_TITLES. ' +
+          'Fine-grained alternative-title control, per indexer hostname, indexer name, or addon type. ' +
           'Format: `<key>:<spec>[,<spec>...][,<key>:<spec>...]`. ' +
           'Keys (checked in priority order): exact indexer hostname (e.g. `my-indexer.com`); auto-extracted indexer name (Jackett `/api/v2.0/indexers/<name>/...`, NZBHydra2 `?indexers=<name>`); addon-id (`newznab`, `torznab`, `easynews`, `knaben`, `prowlarr`, `torrent-galaxy`); `*` wildcard fallback. ' +
           'Specs: `default` (primary/English-style title), `all` (all alternative titles up to BUILTIN_SCRAPE_TITLE_LIMIT), `original` (TMDB original-language title), `<lang>` (ISO 639-1 code, e.g. `de`, `fr`). ' +
