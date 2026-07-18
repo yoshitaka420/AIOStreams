@@ -33,7 +33,10 @@ import {
 } from '../../db/index.js';
 import { type UsenetStreamToken, decodeUsenetStreamToken } from './tokens.js';
 import { friendlyUsenetError } from './errors.js';
-import { markReleaseDead } from '../../release-blocklist/feedback.js';
+import {
+  markReleaseDead,
+  markReleaseDeadForCode,
+} from '../../release-blocklist/feedback.js';
 import { nzbContentKey } from '../../release-blocklist/keys.js';
 import { usenetEngineRegistry, getUsenetEngineConfig } from './engine.js';
 import { fetchNzb, parseNzbCached, canonicaliseNzbHash } from './library.js';
@@ -456,10 +459,17 @@ async function getStreamSession(
           decoded.filename,
           friendly.code
         ).catch(() => {});
-        // NotStreamableError means the release exists; only an all-provider
-        // article miss is blocklist evidence.
+        // The release exists on usenet, but a compressed/solid/unsupported
+        // archive is un-streamable for everyone (global); an all-provider
+        // article miss is backbone-scoped evidence.
         if (err instanceof ArticleNotFoundError && err.allProviders) {
           markReleaseDead(decoded.releaseKey, nzbContentKey(hash));
+        } else if (err instanceof NotStreamableError) {
+          markReleaseDeadForCode(
+            err.code,
+            decoded.releaseKey,
+            nzbContentKey(hash)
+          );
         }
       }
       throw err;

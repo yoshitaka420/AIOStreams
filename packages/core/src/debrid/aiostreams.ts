@@ -4,11 +4,7 @@ import {
   ServiceId,
   createLogger,
 } from '../utils/index.js';
-import {
-  checkAuthToken,
-  parseCredential,
-  Permission,
-} from '../utils/auth.js';
+import { checkAuthToken, parseCredential, Permission } from '../utils/auth.js';
 import {
   DebridServiceConfig,
   DebridDownload,
@@ -31,7 +27,7 @@ import {
   UsenetLibraryRepository,
   type UsenetLibraryEntry,
 } from '../db/index.js';
-import { markReleaseDead } from '../release-blocklist/feedback.js';
+import { markReleaseDeadForCode } from '../release-blocklist/feedback.js';
 import { nzbContentKey } from '../release-blocklist/keys.js';
 
 const logger = createLogger('usenet/service');
@@ -231,16 +227,12 @@ export class NativeUsenetService implements UsenetDebridService {
         },
         'skipping nzb: cached failure (delete the library entry to retry)'
       );
-      // ensure the release is marked dead in the blocklist if it was previously failed on all providers
-      if (
-        existing.errorCode === 'missing_on_providers' ||
-        existing.errorCode === 'article_not_found'
-      ) {
-        markReleaseDead(
-          playbackInfo.releaseKey,
-          nzbContentKey(resolved?.contentHash)
-        );
-      }
+      // ensure the release is marked dead in the blocklist if it was previously failed
+      markReleaseDeadForCode(
+        existing.errorCode,
+        playbackInfo.releaseKey,
+        nzbContentKey(resolved?.contentHash)
+      );
       throw new DebridError('nzb previously failed on all providers', {
         statusCode: 404,
         statusText: 'Not Found',

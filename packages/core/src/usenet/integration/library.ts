@@ -17,6 +17,7 @@ import {
 } from '../../debrid/utils.js';
 import {
   ArticleNotFoundError,
+  NotStreamableError,
   EngineOptions,
   ProviderConfig,
   serializeArchiveLayout,
@@ -28,6 +29,7 @@ import {
 } from '../index.js';
 import {
   markReleaseDead,
+  markReleaseDeadForCode,
   retractRelease,
 } from '../../release-blocklist/feedback.js';
 import { nzbContentKey } from '../../release-blocklist/keys.js';
@@ -428,6 +430,14 @@ async function importNzb(
       recordOnce('failed', { errorCode: friendly.code });
       if (err instanceof ArticleNotFoundError && err.allProviders) {
         markReleaseDead(spec.releaseKey, nzbContentKey(nzbHash));
+      } else if (err instanceof NotStreamableError) {
+        // A compressed/solid/unsupported archive is dead for everyone; other
+        // NotStreamable codes route to a no-op.
+        markReleaseDeadForCode(
+          err.code,
+          spec.releaseKey,
+          nzbContentKey(nzbHash)
+        );
       }
       throw toDebridError(err);
     }
@@ -495,11 +505,10 @@ async function importNzb(
         'no streamable files in nzb'
       );
       const { reason, code } = classifyNoStreamable(content);
-      // Only the article-missing classification is provider-verified
-      // evidence; archive/encoding defect codes never feed the blocklist.
-      if (code === 'missing_on_providers') {
-        markReleaseDead(spec.releaseKey, nzbContentKey(nzbHash));
-      }
+      // A provider-verified article miss is backbone-scoped; a compressed/
+      // solid/unsupported archive is dead for everyone (global). Other codes
+      // never feed the blocklist.
+      markReleaseDeadForCode(code, spec.releaseKey, nzbContentKey(nzbHash));
       recordOnce('failed', { errorCode: code });
       throw await failImport(nzbHash, name, reason, code, {
         byCategory,
@@ -641,12 +650,11 @@ export async function resolveFileList(
       },
       'skipping nzb: same content previously failed via another source (delete the library entry to retry)'
     );
-    if (
-      existing.errorCode === 'missing_on_providers' ||
-      existing.errorCode === 'article_not_found'
-    ) {
-      markReleaseDead(playbackInfo.releaseKey, nzbContentKey(contentHash));
-    }
+    markReleaseDeadForCode(
+      existing.errorCode,
+      playbackInfo.releaseKey,
+      nzbContentKey(contentHash)
+    );
     throw new DebridError('nzb previously failed on all providers', {
       statusCode: 404,
       statusText: 'Not Found',
