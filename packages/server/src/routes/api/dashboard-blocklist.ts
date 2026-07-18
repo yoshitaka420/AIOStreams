@@ -65,13 +65,46 @@ const RemoteSourcesSchema = z.object({
   refreshSeconds: RefreshSecondsSchema.optional(),
 });
 
-const PatchSourceSchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
-  url: z.string().trim().min(1).max(2000).optional(),
-  enabled: z.boolean().optional(),
-  trust: TrustSchema.optional(),
-  refreshSeconds: RefreshSecondsSchema.optional(),
-});
+const SourceIdsSchema = z
+  .object({
+    ids: z.array(z.string().trim().min(1)).min(1).max(200),
+  })
+  .refine((data) => new Set(data.ids).size === data.ids.length, {
+    message: 'duplicate IDs are not allowed',
+    path: ['ids'],
+  });
+
+const PatchSourcesSchema = z
+  .object({
+    ids: z.array(z.string().trim().min(1)).min(1).max(200),
+    name: z.string().trim().min(1).max(120).optional(),
+    url: z.string().trim().min(1).max(2000).optional(),
+    enabled: z.boolean().optional(),
+    trust: TrustSchema.optional(),
+    refreshSeconds: RefreshSecondsSchema.optional(),
+  })
+  .refine((data) => new Set(data.ids).size === data.ids.length, {
+    message: 'duplicate IDs are not allowed',
+    path: ['ids'],
+  })
+  .refine(
+    (data) =>
+      data.name !== undefined ||
+      data.url !== undefined ||
+      data.enabled !== undefined ||
+      data.trust !== undefined ||
+      data.refreshSeconds !== undefined,
+    { message: 'at least one field to update must be provided', path: ['ids'] }
+  )
+  .refine(
+    (data) =>
+      (data.name === undefined && data.url === undefined) ||
+      data.ids.length === 1,
+    {
+      message: 'name and url can only be set on a single source',
+      path: ['ids'],
+    }
+  );
 
 const PublishIntervalSchema = z
   .number()
@@ -465,68 +498,124 @@ router.post('/sources/remote', async (req, res, next) => {
   }
 });
 
-// PATCH /dashboard/blocklist/sources/:id - edit a source.
-router.patch('/sources/:id', async (req, res, next) => {
+// PATCH /dashboard/blocklist/sources - edit one or more sources. name/url are
+// single-source only (see PatchSourcesSchema). The local source silently skips
+// trust/enabled changes it does not allow.
+router.patch('/sources', async (req, res, next) => {
   try {
-    const body = PatchSourceSchema.parse(req.body ?? {});
+    const body = PatchSourcesSchema.parse(req.body ?? {});
     if (body.url !== undefined) {
       const urlError = validateListUrl(body.url);
       if (urlError) return badRequest(res, urlError);
     }
-    await ReleaseBlocklistRepository.updateSource(req.params.id, {
-      name: body.name,
-      url: body.url,
-      enabled: body.enabled,
-      trust: body.trust as never,
-      refreshSeconds: body.refreshSeconds,
-    });
-    res
-      .status(200)
-      .json(createResponse({ success: true, data: await snapshot() }));
+    let affected = 0;
+    let failed = 0;
+    for (const id of body.ids) {
+      if (
+        id === LOCAL_SOURCE_ID &&
+        (body.enabled !== undefined || body.trust !== undefined)
+      ) {
+        continue;
+      }
+      try {
+        await ReleaseBlocklistRepository.updateSource(id, {
+          name: body.name,
+          url: body.url,
+          enabled: body.enabled,
+          trust: body.trust as never,
+          refreshSeconds: body.refreshSeconds,
+        });
+        affected++;
+      } catch (err) {
+        failed++;
+        logger.warn({ id, err }, 'patch source failed');
+      }
+    }
+    res.status(200).json(
+      createResponse({
+        success: true,
+        data: { affected, failed, ...(await snapshot()) },
+      })
+    );
   } catch (err) {
     if (err instanceof ZodError) return badRequest(res, zodMessage(err));
-    if (err instanceof Error && /local source/.test(err.message)) {
-      return badRequest(res, err.message);
+    next(err);
+  }
+});
+
+// POST /dashboard/blocklist/sources/remove - remove one or more sources and
+// their entries. The local source is always skipped.
+router.post('/sources/remove', async (req, res, next) => {
+  try {
+    const { ids } = SourceIdsSchema.parse(req.body ?? {});
+    let affected = 0;
+    let failed = 0;
+    for (const id of ids) {
+      if (id === LOCAL_SOURCE_ID) continue;
+      try {
+        await ReleaseBlocklistRepository.removeSource(id);
+        affected++;
+      } catch (err) {
+        failed++;
+        logger.warn({ id, err }, 'remove source failed');
+      }
     }
+    res.status(200).json(
+      createResponse({
+        success: true,
+        data: { affected, failed, ...(await snapshot()) },
+      })
+    );
+  } catch (err) {
+    if (err instanceof ZodError) return badRequest(res, zodMessage(err));
     next(err);
   }
 });
 
-// DELETE /dashboard/blocklist/sources/:id - remove a source and its entries.
-router.delete('/sources/:id', async (req, res, next) => {
+// POST /dashboard/blocklist/sources/clear - drop the entries of one or more
+// sources while keeping the sources themselves.
+router.post('/sources/clear', async (req, res, next) => {
   try {
-    await ReleaseBlocklistRepository.removeSource(req.params.id);
-    res
-      .status(200)
-      .json(createResponse({ success: true, data: await snapshot() }));
-  } catch (err) {
-    if (err instanceof Error && /local source/.test(err.message)) {
-      return badRequest(res, err.message);
+    const { ids } = SourceIdsSchema.parse(req.body ?? {});
+    let affected = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await ReleaseBlocklistRepository.clearSource(id);
+        affected++;
+      } catch (err) {
+        failed++;
+        logger.warn({ id, err }, 'clear source failed');
+      }
     }
+    res.status(200).json(
+      createResponse({
+        success: true,
+        data: { affected, failed, ...(await snapshot()) },
+      })
+    );
+  } catch (err) {
+    if (err instanceof ZodError) return badRequest(res, zodMessage(err));
     next(err);
   }
 });
 
-// POST /dashboard/blocklist/sources/:id/clear - drop a source's entries.
-router.post('/sources/:id/clear', async (req, res, next) => {
+// POST /dashboard/blocklist/sources/refresh - refetch one or more remote
+// sources now. Non-remote ids are skipped; concurrency is bounded in the
+// service.
+router.post('/sources/refresh', async (req, res, next) => {
   try {
-    await ReleaseBlocklistRepository.clearSource(req.params.id);
-    res
-      .status(200)
-      .json(createResponse({ success: true, data: await snapshot() }));
+    const { ids } = SourceIdsSchema.parse(req.body ?? {});
+    const { refreshed, failed } =
+      await ReleaseBlocklistRemoteService.refreshByIds(ids);
+    res.status(200).json(
+      createResponse({
+        success: true,
+        data: { affected: refreshed, failed, ...(await snapshot()) },
+      })
+    );
   } catch (err) {
-    next(err);
-  }
-});
-
-// POST /dashboard/blocklist/sources/:id/refresh - refetch now.
-router.post('/sources/:id/refresh', async (req, res, next) => {
-  try {
-    await ReleaseBlocklistRemoteService.refreshByIds([req.params.id]);
-    res
-      .status(200)
-      .json(createResponse({ success: true, data: await snapshot() }));
-  } catch (err) {
+    if (err instanceof ZodError) return badRequest(res, zodMessage(err));
     next(err);
   }
 });
